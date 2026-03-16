@@ -70,6 +70,53 @@ defmodule SelectoDBDuckDB.Adapter do
   end
 
   @impl true
+  def format_datetime(sel_iodata, "YYYY-MM-DD") do
+    ["strftime(CAST(", sel_iodata, " AS TIMESTAMP), '%Y-%m-%d')"]
+  end
+
+  def format_datetime(sel_iodata, "YYYY-MM") do
+    ["strftime(CAST(", sel_iodata, " AS TIMESTAMP), '%Y-%m')"]
+  end
+
+  def format_datetime(sel_iodata, "YYYY") do
+    ["strftime(CAST(", sel_iodata, " AS TIMESTAMP), '%Y')"]
+  end
+
+  def format_datetime(sel_iodata, "YYYY-WW") do
+    ["strftime(CAST(", sel_iodata, " AS TIMESTAMP), '%G-%V')"]
+  end
+
+  def format_datetime(sel_iodata, "YYYY-Q") do
+    [
+      "strftime(CAST(",
+      sel_iodata,
+      " AS TIMESTAMP), '%Y') || '-' || CAST(quarter(CAST(",
+      sel_iodata,
+      " AS TIMESTAMP)) AS VARCHAR)"
+    ]
+  end
+
+  def format_datetime(sel_iodata, "MM") do
+    ["strftime(CAST(", sel_iodata, " AS TIMESTAMP), '%m')"]
+  end
+
+  def format_datetime(sel_iodata, "DD") do
+    ["strftime(CAST(", sel_iodata, " AS TIMESTAMP), '%d')"]
+  end
+
+  def format_datetime(sel_iodata, "D") do
+    ["strftime(CAST(", sel_iodata, " AS TIMESTAMP), '%u')"]
+  end
+
+  def format_datetime(sel_iodata, "HH24") do
+    ["strftime(CAST(", sel_iodata, " AS TIMESTAMP), '%H')"]
+  end
+
+  def format_datetime(sel_iodata, _format) do
+    ["CAST(", sel_iodata, " AS VARCHAR)"]
+  end
+
+  @impl true
   def validate_connection(connection) do
     resolved_connection = resolve_connection(connection)
 
