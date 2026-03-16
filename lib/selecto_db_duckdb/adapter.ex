@@ -44,7 +44,7 @@ defmodule SelectoDBDuckDB.Adapter do
         {:error, {:invalid_connection, connection}}
 
       true ->
-        execute_query(resolved_connection, normalize_query(query), params || [])
+        execute_query(resolved_connection, normalize_query(query), normalize_params(params || []))
     end
   end
 
@@ -247,6 +247,23 @@ defmodule SelectoDBDuckDB.Adapter do
 
   defp normalize_query(query) when is_binary(query), do: query
   defp normalize_query(query), do: IO.iodata_to_binary(query)
+
+  defp normalize_params(params) when is_list(params), do: Enum.map(params, &normalize_param/1)
+  defp normalize_params(params), do: params
+
+  defp normalize_param(%Date{} = value), do: Date.to_iso8601(value)
+  defp normalize_param(%NaiveDateTime{} = value), do: NaiveDateTime.to_iso8601(value)
+  defp normalize_param(%DateTime{} = value), do: DateTime.to_iso8601(value)
+
+  defp normalize_param(value) when is_map(value) do
+    if Map.get(value, :__struct__) == Decimal and Code.ensure_loaded?(Decimal) do
+      apply(Decimal, :to_string, [value, :normal])
+    else
+      value
+    end
+  end
+
+  defp normalize_param(value), do: value
 
   defp dependency_available? do
     Code.ensure_loaded?(Duckdbex) and function_exported?(Duckdbex, :open, 0) and
