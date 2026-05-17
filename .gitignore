@@ -3,3 +3,4 @@
 /deps/
 /doc/
 /.elixir_ls/
+.DS_Store
