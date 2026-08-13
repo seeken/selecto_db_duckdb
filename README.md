@@ -10,13 +10,13 @@ using Selecto against DuckDB via `duckdbex`.
 ```elixir
 def deps do
   [
-    {:selecto, "~> 0.4.0"},
-    {:selecto_db_duckdb, "~> 0.1.0"}
+    {:selecto, ">= 0.4.13 and < 0.6.0"},
+    {:selecto_db_duckdb, "~> 0.2.0"}
   ]
 end
 ```
 
-Current package version: `0.1.0`.
+Current package version: `0.2.0`.
 
 ## Usage
 
@@ -47,6 +47,10 @@ selecto =
 - Streaming is not currently supported.
 - Includes adapter callbacks for `execute_raw/3`, `validate_connection/1`,
   `connection_info/1`, and `transaction/3`.
+- Implements portable flat writes, arbitrary `RETURNING`, atomic batches, and
+  generated-key graphs. DuckDB `MERGE` is not advertised because Duckdbex's
+  prepared path cannot bind its parameters safely; graphs use one ordered
+  transaction instead.
 
 ## Local Workspace Development
 
