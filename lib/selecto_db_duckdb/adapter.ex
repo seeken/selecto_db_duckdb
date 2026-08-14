@@ -17,6 +17,47 @@ defmodule SelectoDBDuckDB.Adapter do
   def name, do: :duckdb
 
   @impl true
+  def dialect, do: SelectoDBDuckDB.Dialect
+
+  @impl true
+  def capability(feature), do: %{feature: feature, supported?: supports?(feature)}
+
+  @impl true
+  def normalize_type(type) when is_binary(type) do
+    case type |> String.trim() |> String.downcase() do
+      value when value in ["tinyint", "smallint", "integer", "bigint", "hugeint"] -> :integer
+      value when value in ["real", "float", "double"] -> :float
+      value when value in ["decimal", "numeric"] -> :decimal
+      value when value in ["varchar", "char", "text"] -> :string
+      "boolean" -> :boolean
+      "date" -> :date
+      "time" -> :time
+      "timestamp" -> :naive_datetime
+      "timestamptz" -> :utc_datetime
+      "json" -> :map
+      "blob" -> :binary
+      "uuid" -> :uuid
+      _unknown -> type
+    end
+  end
+
+  def normalize_type(type), do: Selecto.TypeSystem.normalize_type(type)
+
+  @impl true
+  def type_family(type), do: type |> normalize_type() |> Selecto.TypeFamily.of()
+
+  @impl true
+  def normalize_execution_result(%{rows: rows, columns: columns} = result) do
+    {:ok, %{result | rows: rows || [], columns: Enum.map(columns || [], &to_string/1)}}
+  end
+
+  def normalize_execution_result(result), do: {:error, {:invalid_adapter_result, result}}
+
+  @impl true
+  def normalize_error(%Selecto.Error{} = error), do: error
+  def normalize_error(reason), do: Selecto.Error.from_reason(reason)
+
+  @impl true
   def connect(connection) when is_reference(connection), do: {:ok, connection}
   def connect(opts) when is_map(opts), do: connect(Map.to_list(opts))
 
@@ -36,6 +77,10 @@ defmodule SelectoDBDuckDB.Adapter do
   end
 
   def connect(other), do: {:error, {:invalid_connection_options, other}}
+
+  @impl true
+  def disconnect(connection) when is_reference(connection), do: Duckdbex.release(connection)
+  def disconnect(_connection), do: :ok
 
   @impl true
   def execute(connection, query, params, _opts) do
@@ -68,6 +113,9 @@ defmodule SelectoDBDuckDB.Adapter do
   end
 
   def quote_identifier(identifier), do: identifier |> to_string() |> quote_identifier()
+
+  @impl true
+  def rollup_sql(grouped_clauses), do: ["ROLLUP( ", grouped_clauses, " )"]
 
   @impl true
   def supports?(feature) do
