@@ -395,12 +395,22 @@ defmodule SelectoDBDuckDB.WriteCompiler do
     do: assignments |> Enum.flat_map(& &1.params) |> length()
 
   defp with_field_types(opts, metadata),
-    do: Keyword.put(opts, :field_types, Map.get(metadata, :field_types, %{}))
+    do:
+      opts
+      |> Keyword.put(:field_types, Map.get(metadata, :field_types, %{}))
+      |> Keyword.put(
+        :infer_assignment_types?,
+        Map.get(metadata, :foreign_key_guards, []) != []
+      )
 
   defp cast_assignment(text, field, opts, params \\ []) do
     declared_type = fetch_field_type(Keyword.get(opts, :field_types, %{}), field) |> duckdb_type()
 
-    case declared_type || inferred_parameter_type(params) do
+    inferred_type =
+      if Keyword.get(opts, :infer_assignment_types?, false),
+        do: inferred_parameter_type(params)
+
+    case declared_type || inferred_type do
       nil -> text
       type -> "CAST(#{text} AS #{type})"
     end
@@ -424,7 +434,8 @@ defmodule SelectoDBDuckDB.WriteCompiler do
 
   defp fetch_field_type(_types, _field), do: nil
 
-  defp duckdb_type(type) when type in [:integer, "integer", :bigint, "bigint"], do: "BIGINT"
+  defp duckdb_type(type) when type in [:integer, "integer"], do: "INTEGER"
+  defp duckdb_type(type) when type in [:bigint, "bigint"], do: "BIGINT"
   defp duckdb_type(type) when type in [:float, "float"], do: "DOUBLE"
   defp duckdb_type(type) when type in [:decimal, "decimal"], do: "DECIMAL"
   defp duckdb_type(type) when type in [:string, "string", :text, "text"], do: "VARCHAR"

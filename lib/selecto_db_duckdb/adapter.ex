@@ -312,7 +312,7 @@ defmodule SelectoDBDuckDB.Adapter do
        %Result{
          operation: command.operation,
          affected_rows: affected_rows,
-         rows: result_rows(query_result),
+         rows: result_rows(command, query_result),
          metadata: %{dialect: :duckdb}
        }}
     else
@@ -340,9 +340,10 @@ defmodule SelectoDBDuckDB.Adapter do
   defp cardinality_matches?(count, {:between, minimum, maximum}), do: count in minimum..maximum
   defp cardinality_matches?(_count, :many), do: true
 
-  defp result_rows(%{columns: ["Count"]}), do: []
+  defp result_rows(%Command{returning: :none}, _result), do: []
+  defp result_rows(_command, %{columns: ["Count"]}), do: []
 
-  defp result_rows(%{rows: rows, columns: columns}) do
+  defp result_rows(_command, %{rows: rows, columns: columns}) do
     Enum.map(rows, fn row -> Map.new(Enum.zip(columns, row)) end)
   end
 

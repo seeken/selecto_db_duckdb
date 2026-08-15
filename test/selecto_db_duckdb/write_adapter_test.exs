@@ -118,6 +118,89 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
              Write.execute(selecto, delete)
   end
 
+  test "executes insert and upsert without exposing internal returning rows", %{
+    connection: connection,
+    selecto: selecto
+  } do
+    create_integer_write_table(connection)
+
+    insert =
+      command!(%{
+        operation: :insert,
+        relation: :cert_writes,
+        assignments: [
+          %{field: :id, value: {:literal, 2}},
+          %{field: :external_id, value: {:literal, "no-return"}},
+          %{field: :name, value: {:literal, "Inserted"}}
+        ],
+        expected_cardinality: {:exactly, 1},
+        returning: :none
+      })
+
+    assert {:ok, %Result{affected_rows: 1, rows: []}} = Write.execute(selecto, insert)
+
+    upsert =
+      command!(%{
+        operation: :upsert,
+        relation: :cert_writes,
+        assignments: [
+          %{field: :id, value: {:literal, 99}},
+          %{field: :external_id, value: {:literal, "no-return"}},
+          %{field: :name, value: {:literal, "Upserted"}}
+        ],
+        metadata: %{
+          conflict_target: [:external_id],
+          upsert_update_fields: [:name]
+        },
+        expected_cardinality: {:exactly, 1},
+        returning: :none
+      })
+
+    assert {:ok, %Result{affected_rows: 1, rows: []}} = Write.execute(selecto, upsert)
+
+    assert rows!(connection, "SELECT name FROM cert_writes WHERE external_id = 'no-return'") == [
+             ["Upserted"]
+           ]
+  end
+
+  test "rolls back a no-return insert when a later batch command misses cardinality", %{
+    connection: connection,
+    selecto: selecto
+  } do
+    create_integer_write_table(connection)
+
+    insert =
+      command!(%{
+        operation: :insert,
+        relation: :cert_writes,
+        assignments: [
+          %{field: :id, value: {:literal, 2}},
+          %{field: :external_id, value: {:literal, "batch-first"}},
+          %{field: :name, value: {:literal, "First"}}
+        ],
+        expected_cardinality: {:exactly, 1},
+        returning: :none
+      })
+
+    missing =
+      command!(%{
+        operation: :update,
+        relation: :cert_writes,
+        assignments: [%{field: :name, value: {:literal, "Never"}}],
+        predicate: {:eq, {:field, :external_id}, {:literal, "missing"}},
+        expected_cardinality: {:exactly, 1},
+        returning: :none
+      })
+
+    {:ok, batch} = Batch.new([insert, missing])
+
+    assert {:error, %Error{type: :cardinality_mismatch, details: %{actual: 0}}} =
+             Write.execute(selecto, batch)
+
+    assert rows!(connection, "SELECT COUNT(*) FROM cert_writes WHERE external_id = 'batch-first'") ==
+             [[0]]
+  end
+
   test "rolls back a cardinality mismatch", %{connection: connection, selecto: selecto} do
     execute!(
       connection,
@@ -262,6 +345,13 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
 
   defp execute!(connection, sql, params \\ []) do
     assert {:ok, _result} = Adapter.execute(connection, sql, params, [])
+  end
+
+  defp create_integer_write_table(connection) do
+    execute!(
+      connection,
+      "CREATE TABLE cert_writes (id INTEGER PRIMARY KEY, external_id VARCHAR NOT NULL UNIQUE, name VARCHAR NOT NULL)"
+    )
   end
 
   defp rows!(connection, sql, params \\ []) do
