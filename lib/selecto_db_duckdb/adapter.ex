@@ -263,11 +263,13 @@ defmodule SelectoDBDuckDB.Adapter do
            operation: :graph,
            affected_rows: affected_rows,
            rows: Materializer.root_rows(graph, results),
-           metadata: %{
-             dialect: :duckdb,
-             atomic?: true,
-             node_strategies: Map.new(strategies)
-           }
+           metadata:
+             %{
+               dialect: :duckdb,
+               atomic?: true,
+               node_strategies: Map.new(strategies)
+             }
+             |> Map.merge(Materializer.outcome_metadata(graph, results))
          }}
 
       error ->
