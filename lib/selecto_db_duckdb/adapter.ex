@@ -137,6 +137,7 @@ defmodule SelectoDBDuckDB.Adapter do
       transactions: true,
       atomic_batch: true,
       write_graph: true,
+      prepared_candidate_state: false,
       dialect: :duckdb,
       server_version: version,
       merge: false,

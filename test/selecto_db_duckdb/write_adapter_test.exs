@@ -40,6 +40,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
     assert {:ok, capabilities} = Write.capabilities(selecto)
     assert capabilities.protocol_version == 1
     assert capabilities.write_graph
+    refute capabilities.prepared_candidate_state
     assert capabilities.generated_keys == :returning
     assert capabilities.merge_available
     refute capabilities.merge
