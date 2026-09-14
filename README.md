@@ -63,6 +63,12 @@ selecto =
 
 ## Local Workspace Development
 
+Typed write assignments retain their declared cast inside a scalar SELECT so
+Duckdbex can bind the expected parameter type even when the destination column
+is wider (for example, an INTEGER declaration writing to BIGINT). The declared
+type is not widened. Native tests cover insert/update/upsert, NULL values,
+returned rows, cardinality rollback and rejection of INTEGER overflow.
+
 For local multi-repo development against vendored ecosystem packages, set:
 
 ```bash

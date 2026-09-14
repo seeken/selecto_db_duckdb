@@ -53,6 +53,88 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
     assert report.capabilities.dialect == :duckdb
   end
 
+  test "typed writes preserve parameter types across wider destination columns", %{
+    selecto: selecto,
+    connection: connection
+  } do
+    execute!(
+      connection,
+      "CREATE TABLE typed_writes(id BIGINT PRIMARY KEY, quantity BIGINT, label VARCHAR)"
+    )
+
+    assignments = fn id, quantity, label ->
+      Enum.map([id: id, quantity: quantity, label: label], fn {field, value} ->
+        %{field: field, value: {:literal, value}}
+      end)
+    end
+
+    metadata = %{field_types: %{id: :integer, quantity: :integer, label: :string}}
+
+    insert =
+      command!(%{
+        operation: :insert,
+        relation: :typed_writes,
+        assignments: assignments.(1, 7, nil),
+        metadata: metadata,
+        returning: [:id, :quantity, :label]
+      })
+
+    assert {:ok, %Result{affected_rows: 1, rows: [%{"id" => 1, "quantity" => 7, "label" => nil}]}} =
+             Write.execute(selecto, insert)
+
+    update =
+      command!(%{
+        operation: :update,
+        relation: :typed_writes,
+        assignments: [%{field: :quantity, value: {:literal, 9}}],
+        metadata: metadata,
+        predicate: {:eq, {:field, :id}, {:literal, 1}},
+        returning: [:quantity]
+      })
+
+    assert {:ok, %Result{affected_rows: 1, rows: [%{"quantity" => 9}]}} =
+             Write.execute(selecto, update)
+
+    for {id, quantity} <- [{2, 11}, {2, 12}] do
+      upsert =
+        command!(%{
+          operation: :upsert,
+          relation: :typed_writes,
+          assignments: assignments.(id, quantity, nil),
+          metadata:
+            Map.merge(metadata, %{
+              conflict_target: [:id],
+              upsert_update_fields: [:quantity, :label]
+            }),
+          returning: [:id, :quantity]
+        })
+
+      assert {:ok, %Result{affected_rows: 1, rows: [%{"id" => ^id, "quantity" => ^quantity}]}} =
+               Write.execute(selecto, upsert)
+    end
+
+    rollback = %{update | expected_cardinality: {:exactly, 2}}
+    assert {:error, %Error{type: :cardinality_mismatch}} = Write.execute(selecto, rollback)
+
+    overflow =
+      command!(%{
+        operation: :insert,
+        relation: :typed_writes,
+        assignments: assignments.(3, 2_147_483_648, nil),
+        metadata: metadata
+      })
+
+    assert {:error, _} = Write.execute(selecto, overflow)
+
+    assert {:ok, %{rows: [[1, 9, nil], [2, 12, nil]]}} =
+             Adapter.execute(
+               connection,
+               "SELECT id,quantity,label FROM typed_writes ORDER BY id",
+               [],
+               []
+             )
+  end
+
   test "executes governed flat writes and normalizes cardinality", %{selecto: selecto} do
     insert =
       command!(%{

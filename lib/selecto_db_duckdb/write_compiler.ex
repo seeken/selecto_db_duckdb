@@ -412,7 +412,11 @@ defmodule SelectoDBDuckDB.WriteCompiler do
 
     case declared_type || inferred_type do
       nil -> text
-      type -> "CAST(#{text} AS #{type})"
+      # Keep the parameter's declared type visible to Duckdbex. DuckDB can
+      # otherwise optimize a cast into the destination column and leave an
+      # unresolved parameter type (for example INTEGER into a BIGINT column).
+      # A scalar SELECT preserves the cast without widening its semantics.
+      type -> "(SELECT CAST(#{text} AS #{type}))"
     end
   end
 
