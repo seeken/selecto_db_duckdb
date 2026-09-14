@@ -107,6 +107,49 @@ defmodule SelectoDBDuckDB.Adapter do
   def placeholder(index), do: ["$", Integer.to_string(index)]
 
   @impl true
+  def parameter_placeholder(index, %Decimal{} = value) do
+    if not is_integer(value.coef) do
+      raise ArgumentError, "DuckDB decimal parameter must be finite"
+    end
+
+    # Decimal.normalize/1 applies the ambient precision context and can round
+    # a valid 38-digit parameter before we even choose its SQL type.
+    {coefficient, exponent} = exact_decimal_parts(value.coef, value.exp)
+
+    scale = max(-exponent, 0)
+    precision = max(String.length(Integer.to_string(coefficient)) + exponent, 0) + scale
+    precision = max(precision, 1)
+
+    if precision > 38 or scale > 38 do
+      raise ArgumentError, "DuckDB decimal parameter exceeds supported precision"
+    end
+
+    # Duckdbex accepts exact decimal text for a DECIMAL parameter. Give the
+    # parameter its own precision/scale before column comparison, including
+    # coefficients beyond the driver's int64 tuple representation.
+    # The scalar SELECT retains parameter metadata when DuckDB would otherwise
+    # optimize away a lower-scale cast before Duckdbex binds the values.
+    [
+      "(SELECT CAST(",
+      placeholder(index),
+      " AS DECIMAL(",
+      "38",
+      ",",
+      Integer.to_string(scale),
+      ")))"
+    ]
+  end
+
+  def parameter_placeholder(index, _value), do: placeholder(index)
+
+  defp exact_decimal_parts(0, _exponent), do: {0, 0}
+
+  defp exact_decimal_parts(coefficient, exponent) when rem(coefficient, 10) == 0,
+    do: exact_decimal_parts(div(coefficient, 10), exponent + 1)
+
+  defp exact_decimal_parts(coefficient, exponent), do: {coefficient, exponent}
+
+  @impl true
   def quote_identifier(identifier) when is_binary(identifier) do
     escaped = String.replace(identifier, "\"", "\"\"")
     "\"#{escaped}\""

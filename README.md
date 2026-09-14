@@ -43,6 +43,15 @@ selecto =
 ## Notes
 
 - Placeholder style is `$N`.
+- Decimal parameters use the public optional `parameter_placeholder/2` callback
+  and retain their own exact scale, not the destination column's scale. A scalar
+  `SELECT CAST($N AS DECIMAL(38,s))` preserves Duckdbex's prepared parameter
+  metadata. Values stay separately bound; no decimal arithmetic context is used
+  to derive precision. Queries and portable writes use the same hook.
+- Parameters requiring more than 38 decimal digits are rejected before the
+  driver. DuckDB's own 38-digit intermediate comparison limit still applies:
+  combining a maximum-width whole value with a higher-scale operand can overflow
+  a common decimal type. Exact transport does not promise arbitrary precision.
 - Identifier quoting uses double quotes.
 - Streaming is not currently supported.
 - Includes adapter callbacks for `execute_raw/3`, `validate_connection/1`,

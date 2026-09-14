@@ -449,7 +449,10 @@ defmodule SelectoDBDuckDB.WriteCompiler do
   defp duckdb_type(type) when type in [:uuid, "uuid", :binary_id, "binary_id"], do: "UUID"
   defp duckdb_type(_type), do: nil
 
-  defp parameter(value, offset), do: {:ok, %{text: "$#{offset + 1}", params: [value]}}
+  defp parameter(value, offset) do
+    text = SelectoDBDuckDB.Adapter.parameter_placeholder(offset + 1, value)
+    {:ok, %{text: IO.iodata_to_binary(text), params: [value]}}
+  end
 
   defp renumber(text, delta) do
     Regex.replace(~r/\$(\d+)/, text, fn _whole, number ->
