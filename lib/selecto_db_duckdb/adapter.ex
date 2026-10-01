@@ -55,7 +55,29 @@ defmodule SelectoDBDuckDB.Adapter do
 
   @impl true
   def normalize_error(%Selecto.Error{} = error), do: error
+
+  # DuckDB messages quote key values, names and SQL text. Only a stable
+  # category leaves the read path.
+  def normalize_error(reason) when is_binary(reason) do
+    Selecto.Error.query_error("DuckDB rejected the statement", nil, [], %{
+      adapter: :duckdb,
+      category: duckdb_error_category(reason)
+    })
+  end
+
   def normalize_error(reason), do: Selecto.Error.from_reason(reason)
+
+  defp duckdb_error_category("Constraint Error" <> _ = message) do
+    cond do
+      message =~ "Duplicate key" -> :unique_violation
+      message =~ "NOT NULL constraint" -> :not_null_violation
+      message =~ ~r/foreign key/i -> :foreign_key_violation
+      message =~ "CHECK constraint" -> :check_violation
+      true -> :database_error
+    end
+  end
+
+  defp duckdb_error_category(_message), do: :database_error
 
   @impl true
   def connect(connection) when is_reference(connection), do: {:ok, connection}
