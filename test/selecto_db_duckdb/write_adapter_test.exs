@@ -80,7 +80,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
       })
 
     assert {:ok, %Result{affected_rows: 1, rows: [%{"id" => 1, "quantity" => 7, "label" => nil}]}} =
-             Write.execute(selecto, insert)
+             Write.execute_unsafe(selecto, insert)
 
     update =
       command!(%{
@@ -93,7 +93,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
       })
 
     assert {:ok, %Result{affected_rows: 1, rows: [%{"quantity" => 9}]}} =
-             Write.execute(selecto, update)
+             Write.execute_unsafe(selecto, update)
 
     for {id, quantity} <- [{2, 11}, {2, 12}] do
       upsert =
@@ -110,11 +110,11 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
         })
 
       assert {:ok, %Result{affected_rows: 1, rows: [%{"id" => ^id, "quantity" => ^quantity}]}} =
-               Write.execute(selecto, upsert)
+               Write.execute_unsafe(selecto, upsert)
     end
 
     rollback = %{update | expected_cardinality: {:exactly, 2}}
-    assert {:error, %Error{type: :cardinality_mismatch}} = Write.execute(selecto, rollback)
+    assert {:error, %Error{type: :cardinality_mismatch}} = Write.execute_unsafe(selecto, rollback)
 
     overflow =
       command!(%{
@@ -124,7 +124,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
         metadata: metadata
       })
 
-    assert {:error, _} = Write.execute(selecto, overflow)
+    assert {:error, _} = Write.execute_unsafe(selecto, overflow)
 
     assert {:ok, %{rows: [[1, 9, nil], [2, 12, nil]]}} =
              Adapter.execute(
@@ -135,7 +135,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
              )
   end
 
-  test "executes governed flat writes and normalizes cardinality", %{selecto: selecto} do
+  test "executes flat writes and normalizes cardinality", %{selecto: selecto} do
     insert =
       command!(%{
         operation: :insert,
@@ -149,7 +149,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
       })
 
     assert {:ok, %Result{affected_rows: 1, rows: [%{"id" => id, "tenant_id" => 7}]}} =
-             Write.execute(selecto, insert, context: %{tenant_id: 7})
+             Write.execute_unsafe(selecto, insert, context: %{tenant_id: 7})
 
     update =
       command!(%{
@@ -166,7 +166,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
       })
 
     assert {:ok, %Result{affected_rows: 1, rows: [%{"name" => "Updated"}]}} =
-             Write.execute(selecto, update, context: %{tenant_id: 7})
+             Write.execute_unsafe(selecto, update, context: %{tenant_id: 7})
 
     upsert =
       command!(%{
@@ -182,7 +182,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
       })
 
     assert {:ok, %Result{affected_rows: 1, rows: [%{"id" => ^id, "name" => "Upserted"}]}} =
-             Write.execute(selecto, upsert)
+             Write.execute_unsafe(selecto, upsert)
 
     delete =
       command!(%{
@@ -198,7 +198,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
       })
 
     assert {:ok, %Result{affected_rows: 1, rows: [%{"id" => ^id}]}} =
-             Write.execute(selecto, delete)
+             Write.execute_unsafe(selecto, delete)
   end
 
   test "executes insert and upsert without exposing internal returning rows", %{
@@ -220,7 +220,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
         returning: :none
       })
 
-    assert {:ok, %Result{affected_rows: 1, rows: []}} = Write.execute(selecto, insert)
+    assert {:ok, %Result{affected_rows: 1, rows: []}} = Write.execute_unsafe(selecto, insert)
 
     upsert =
       command!(%{
@@ -239,7 +239,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
         returning: :none
       })
 
-    assert {:ok, %Result{affected_rows: 1, rows: []}} = Write.execute(selecto, upsert)
+    assert {:ok, %Result{affected_rows: 1, rows: []}} = Write.execute_unsafe(selecto, upsert)
 
     assert rows!(connection, "SELECT name FROM cert_writes WHERE external_id = 'no-return'") == [
              ["Upserted"]
@@ -278,7 +278,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
     {:ok, batch} = Batch.new([insert, missing])
 
     assert {:error, %Error{type: :cardinality_mismatch, details: %{actual: 0}}} =
-             Write.execute(selecto, batch)
+             Write.execute_unsafe(selecto, batch)
 
     assert rows!(connection, "SELECT COUNT(*) FROM cert_writes WHERE external_id = 'batch-first'") ==
              [[0]]
@@ -301,7 +301,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
       })
 
     assert {:error, %Error{type: :cardinality_mismatch, details: %{actual: 2}}} =
-             Write.execute(selecto, command)
+             Write.execute_unsafe(selecto, command)
 
     assert rows!(connection, "SELECT name FROM items ORDER BY external_id") == [["A"], ["B"]]
   end
@@ -314,7 +314,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
     duplicate = insert_command("duplicate", "Second")
     {:ok, batch} = Batch.new([first, duplicate])
 
-    assert {:error, %Error{type: :execution_failed}} = Write.execute(selecto, batch)
+    assert {:error, %Error{type: :execution_failed}} = Write.execute_unsafe(selecto, batch)
     assert rows!(connection, "SELECT COUNT(*) FROM items") == [[0]]
   end
 
@@ -386,7 +386,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
                   %{client_identity: "child-1", identity: %{"id" => mapped_child_id}}
                 ]
               }
-            }} = Write.execute(selecto, graph)
+            }} = Write.execute_unsafe(selecto, graph)
 
     assert mapped_child_id == child_id
     assert rows!(connection, "SELECT item_id, name FROM children") == [[parent_id, "Child"]]
@@ -414,7 +414,7 @@ defmodule SelectoDBDuckDB.WriteAdapterTest do
       })
 
     assert {:error, %Error{type: :cardinality_mismatch, details: %{actual: 0}}} =
-             Write.execute(selecto, guarded)
+             Write.execute_unsafe(selecto, guarded)
 
     assert rows!(connection, "SELECT COUNT(*) FROM children") == [[0]]
   end

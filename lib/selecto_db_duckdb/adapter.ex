@@ -1,6 +1,12 @@
 defmodule SelectoDBDuckDB.Adapter do
   @moduledoc """
   DuckDB adapter for Selecto backed by `Duckdbex`.
+
+  Writes reach this adapter through the governed entry point, `SelectoUpdato`.
+  `execute_write/3` refuses a write without the `Selecto.Write.Authorization`
+  issued for exactly that payload (`:ungoverned_write`).
+  `execute_write_unsafe/3` skips that check and exists for trusted tooling and
+  adapter tests only.
   """
 
   @behaviour Selecto.DB.Adapter
@@ -221,10 +227,31 @@ defmodule SelectoDBDuckDB.Adapter do
   def preview_write(_connection, %Graph{} = graph, opts), do: preview_graph(graph, opts)
   def preview_write(_connection, write, _opts), do: invalid_write_input(write)
 
-  @impl Selecto.DB.WriteAdapter
-  def execute_write(connection, write, opts \\ [])
+  @doc """
+  Executes a governed write.
 
-  def execute_write(connection, %Command{} = command, opts) do
+  `opts[:authorization]` must be the `Selecto.Write.Authorization` that the
+  governed entry point (`SelectoUpdato`) issued for exactly this command,
+  batch, or graph. Without it the write fails with `:ungoverned_write` before
+  any statement runs.
+  """
+  @impl Selecto.DB.WriteAdapter
+  def execute_write(connection, write, opts \\ []) do
+    with :ok <- Selecto.Write.Authorization.require_for(write, opts) do
+      execute_write_unsafe(connection, write, opts)
+    end
+  end
+
+  @doc """
+  Executes a write without domain governance.
+
+  For trusted tooling and adapter tests only; application code writes through
+  `SelectoUpdato`.
+  """
+  @impl Selecto.DB.WriteAdapter
+  def execute_write_unsafe(connection, write, opts \\ [])
+
+  def execute_write_unsafe(connection, %Command{} = command, opts) do
     with :ok <- Command.validate(command) do
       with_write_transaction(connection, opts, fn tx ->
         execute_write_command(tx, command, opts)
@@ -232,7 +259,7 @@ defmodule SelectoDBDuckDB.Adapter do
     end
   end
 
-  def execute_write(connection, %Batch{} = batch, opts) do
+  def execute_write_unsafe(connection, %Batch{} = batch, opts) do
     with :ok <- Batch.validate(batch) do
       with_write_transaction(connection, opts, fn tx ->
         Enum.reduce_while(batch.commands, {:ok, []}, fn command, {:ok, results} ->
@@ -245,13 +272,13 @@ defmodule SelectoDBDuckDB.Adapter do
     end
   end
 
-  def execute_write(connection, %Graph{} = graph, opts) do
+  def execute_write_unsafe(connection, %Graph{} = graph, opts) do
     with :ok <- Graph.validate(graph) do
       with_write_transaction(connection, opts, fn tx -> execute_graph(tx, graph, opts) end)
     end
   end
 
-  def execute_write(_connection, write, _opts), do: invalid_write_input(write)
+  def execute_write_unsafe(_connection, write, _opts), do: invalid_write_input(write)
 
   defp preview_graph(%Graph{} = graph, opts) do
     graph.nodes
