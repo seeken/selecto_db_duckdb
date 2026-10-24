@@ -130,6 +130,30 @@ defmodule SelectoDBDuckDB.PostImageTest do
     assert rows == [["x"], ["y"]]
   end
 
+  test "inside the caller's transaction a refused write leaves the row unchanged",
+       %{connection: c} do
+    # w3exrev16 item 18: the caller ignores the refusal and commits. DuckDB
+    # has no savepoints, so a write inside the caller's transaction is
+    # refused before its DML.
+    assert {:ok, refused} =
+             Adapter.transaction(c, fn tx ->
+               {:ok, Adapter.execute_write_unsafe(tx, update([{"site", "S9"}], site("S1")), [])}
+             end)
+
+    assert {:error, _} = refused
+    assert stored(c) == [[1, "T1", "S1", "a"]]
+
+    exec!(c, "BEGIN TRANSACTION")
+
+    refute match?(
+             {:ok, _},
+             Adapter.execute_write_unsafe(c, update([{"site", "S9"}], site("S1")), [])
+           )
+
+    exec!(c, "COMMIT")
+    assert stored(c) == [[1, "T1", "S1", "a"]]
+  end
+
   test "in-scope writes apply; inserts are re-read under the full guard", %{connection: c} do
     assert {:ok, %{affected_rows: 1, rows: []}} =
              Adapter.execute_write_unsafe(c, update([{"name", "u"}], site("S1")), [])
