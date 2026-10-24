@@ -193,6 +193,36 @@ defmodule SelectoDBDuckDB.Adapter do
     feature in [:cte, :window_functions, :transactions, :rollup]
   end
 
+  @column_catalog_sql """
+  SELECT column_name, data_type FROM information_schema.columns
+  WHERE table_name = $1 AND table_schema = current_schema()
+  ORDER BY ordinal_position
+  """
+
+  @impl Selecto.DB.WriteAdapter
+  # information_schema data_type (DECIMAL(p,s), VARCHAR, INTEGER, ...) for
+  # SelectoUpdato's verified candidate check (query_enforced_scalar v2). A
+  # session default_collation other than none (NOCASE, NOACCENT) makes text
+  # comparisons nondeterministic, so every column is reported that way.
+  def column_catalog(connection, table) when is_binary(table) do
+    with {:ok, %{rows: rows}} <- execute(connection, @column_catalog_sql, [table], []),
+         {:ok, deterministic} <- default_collation_deterministic(connection) do
+      {:ok,
+       Map.new(rows, fn [name, type] ->
+         {name, %{type: String.downcase(type), deterministic: deterministic}}
+       end)}
+    end
+  end
+
+  defp default_collation_deterministic(connection) do
+    case execute(connection, "SELECT current_setting('default_collation')", [], []) do
+      {:ok, %{rows: [[value]]}} when value in [nil, ""] -> {:ok, true}
+      {:ok, %{rows: [[_value]]}} -> {:ok, false}
+      {:error, _reason} = error -> error
+      _other -> {:ok, false}
+    end
+  end
+
   @impl Selecto.DB.WriteAdapter
   def write_capabilities(connection) do
     version = server_version(connection)
