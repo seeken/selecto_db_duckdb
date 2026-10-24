@@ -193,24 +193,57 @@ defmodule SelectoDBDuckDB.Adapter do
     feature in [:cte, :window_functions, :transactions, :rollup]
   end
 
+  # DuckDB folds identifier case, so a table matches case-insensitively, in
+  # the named schema or the current one.
   @column_catalog_sql """
   SELECT column_name, data_type FROM information_schema.columns
-  WHERE table_name = $1 AND table_schema = current_schema()
+  WHERE lower(table_name) = lower($1) AND lower(table_schema) = lower(COALESCE($2, current_schema()))
   ORDER BY ordinal_position
+  """
+
+  @column_collation_sql """
+  SELECT sql FROM duckdb_tables()
+  WHERE lower(table_name) = lower($1) AND lower(schema_name) = lower(COALESCE($2, current_schema()))
   """
 
   @impl Selecto.DB.WriteAdapter
   # information_schema data_type (DECIMAL(p,s), VARCHAR, INTEGER, ...) for
-  # SelectoUpdato's verified candidate check (query_enforced_scalar v2). A
-  # session default_collation other than none (NOCASE, NOACCENT) makes text
-  # comparisons nondeterministic, so every column is reported that way.
+  # SelectoUpdato's verified candidate check (query_enforced_scalar v2).
+  # DuckDB's catalog views do not report a column's collation: it appears
+  # only in the table's regenerated CREATE statement. Every column is
+  # therefore reported nondeterministic (identity: byte-identical decisions
+  # only) when that statement declares any COLLATE, when it cannot be read,
+  # or under a session default_collation; otherwise the columns use DuckDB's
+  # binary comparison.
   def column_catalog(connection, table) when is_binary(table) do
-    with {:ok, %{rows: rows}} <- execute(connection, @column_catalog_sql, [table], []),
-         {:ok, deterministic} <- default_collation_deterministic(connection) do
+    {schema, name} =
+      case String.split(table, ".", parts: 2) do
+        [schema, name] -> {schema, name}
+        [name] -> {nil, name}
+      end
+
+    with {:ok, %{rows: rows}} <-
+           execute(connection, @column_catalog_sql, [name, schema], []),
+         {:ok, deterministic} <- deterministic_columns(connection, name, schema) do
       {:ok,
-       Map.new(rows, fn [name, type] ->
-         {name, %{type: String.downcase(type), deterministic: deterministic}}
+       Map.new(rows, fn [column, type] ->
+         {column, %{type: String.downcase(type), deterministic: deterministic}}
        end)}
+    end
+  end
+
+  defp deterministic_columns(connection, name, schema) do
+    with {:ok, true} <- default_collation_deterministic(connection) do
+      case execute(connection, @column_collation_sql, [name, schema], []) do
+        {:ok, %{rows: [[sql]]}} when is_binary(sql) ->
+          {:ok, not Regex.match?(~r/\bcollate\b/i, sql)}
+
+        {:ok, _rows} ->
+          {:ok, false}
+
+        {:error, _reason} = error ->
+          error
+      end
     end
   end
 
