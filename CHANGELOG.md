@@ -4,6 +4,14 @@ All notable changes to `selecto_db_duckdb` will be documented in this file.
 
 ## Unreleased
 
+- TW-09 post-image: a guarded INSERT/UPDATE/UPSERT (`metadata.post_image`)
+  returns its rows' keys and re-reads them under the scope in the same
+  transaction; a row outside it rolls back with `query_rule_violation`. The
+  relation resolves as DuckDB resolves the write (temp, then the current
+  database and schema; a view is refused) and the key must be a primary key
+  or a unique constraint over NOT NULL columns, else
+  `query_rule_not_evaluable`.
+
 - Fixed: `column_catalog/2` reports every column of a table nondeterministic
   when its regenerated CREATE statement declares any `COLLATE` (DuckDB's
   catalog views do not show per-column collations), so `VARCHAR COLLATE
