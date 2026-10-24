@@ -4,6 +4,12 @@ All notable changes to `selecto_db_duckdb` will be documented in this file.
 
 ## Unreleased
 
+- Fixed: `column_catalog/2` reports every column of a table nondeterministic
+  when its regenerated CREATE statement declares any `COLLATE` (DuckDB's
+  catalog views do not show per-column collations), so `VARCHAR COLLATE
+  NOCASE` never decides `<>` in process. Table names match case-insensitively
+  and may be schema-qualified.
+
 - `column_catalog/2`: information_schema data types (with precision and
   scale) for SelectoUpdato's verified candidate check (query_enforced_scalar
   v2); a session `default_collation` marks every column nondeterministic.
