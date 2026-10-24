@@ -4,6 +4,10 @@ All notable changes to `selecto_db_duckdb` will be documented in this file.
 
 ## Unreleased
 
+- `column_catalog/2`: information_schema data types (with precision and
+  scale) for SelectoUpdato's verified candidate check (query_enforced_scalar
+  v2); a session `default_collation` marks every column nondeterministic.
+
 - `execute_write/3` refuses a write without the `Selecto.Write.Authorization`
   the governed entry point (`SelectoUpdato`) issued for exactly that command,
   batch or graph, with `:ungoverned_write` and no row changed. The raw
