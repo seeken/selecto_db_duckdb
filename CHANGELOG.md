@@ -4,6 +4,10 @@ All notable changes to `selecto_db_duckdb` will be documented in this file.
 
 ## Unreleased
 
+- Tested against Selecto's single CTE and VALUES name rule: a filter subquery
+  or a declared non-association join reads its table, and an outer list of that
+  name refuses (`cte_name_collision`); a domain rooted on a CTE reads the CTE;
+  lists of one name in two union members are private to each.
 - TW-09 post-image: a guarded INSERT/UPDATE/UPSERT (`metadata.post_image`)
   returns its rows' keys and re-reads them under the scope in the same
   transaction; a row outside it rolls back with `query_rule_violation`. The
