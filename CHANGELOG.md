@@ -4,6 +4,13 @@ All notable changes to `selecto_db_duckdb` will be documented in this file.
 
 ## Unreleased
 
+- Only a query's root reads a CTE or VALUES list of its name, and only when its
+  domain declares no `source_schema`; joined schemas, through tables and
+  declared tables stay tables (`cte_name_collision`). A root named like one of
+  its own lists reads the list, even where a table of that name exists. CASE
+  subqueries count like filter subqueries; a raw CTE counts by the name its text
+  starts with, and no longer raises `BadMapError`. An embedded query missing its
+  required tenant refuses `tenant_scope_missing` instead of raising.
 - Tested against Selecto's single CTE and VALUES name rule: a filter subquery
   or a declared non-association join reads its table, and an outer list of that
   name refuses (`cte_name_collision`); a domain rooted on a CTE reads the CTE;
