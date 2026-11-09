@@ -86,3 +86,19 @@ SELECTO_ECOSYSTEM_USE_LOCAL=true
 ```
 
 When enabled, this package resolves `{:selecto, path: "../selecto"}`.
+
+## CTE and VALUES names
+
+Selecto holds one rule on every adapter. A name a query reads is a reference to
+a CTE or VALUES list at two places only: a query's root, when its domain
+declares no `source_schema` and the query defines a list of that name itself
+(or, for a CTE body, one visible where the body sits), and an ad-hoc join
+naming a visible list. Every other name is a table, and a table named like a
+list defined anywhere in the statement refuses (`cte_name_collision`); one name
+defined twice with different lists refuses (`cte_name_redefined`) unless the
+two sit in different set members. A root named like one of its own lists reads
+the list, even where a table of that name exists. A raw CTE's text must be
+plain `name [(columns)] AS (...)` definitions; on DuckDB dollar quotes and
+nested block comments in it are refused (`raw_cte_unparsed`). Names compare
+case-insensitively.
+
