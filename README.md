@@ -10,13 +10,13 @@ using Selecto against DuckDB via `duckdbex`.
 ```elixir
 def deps do
   [
-    {:selecto, ">= 0.5.0 and < 0.6.0"},
+    {:selecto, ">= 0.6.0 and < 0.7.0"},
     {:selecto_db_duckdb, "~> 0.5.0"}
   ]
 end
 ```
 
-Current package version: `0.2.0`.
+Current package version: `0.5.0`.
 
 ## Usage
 
