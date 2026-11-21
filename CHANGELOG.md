@@ -4,6 +4,9 @@ All notable changes to `selecto_db_duckdb` will be documented in this file.
 
 ## Unreleased
 
+- Governed computed values: the canonical casts and `days_between`
+  (`date_diff('day', ...)` of the two dates). JSON text extraction stays
+  unsupported.
 - A raw CTE's text must be plain definitions, comments allowed; every name it
   defines counts (several in one text, comments before them, backtick or
   double-quoted names), and text that does not parse refuses `raw_cte_unparsed`.
