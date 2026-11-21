@@ -190,7 +190,7 @@ defmodule SelectoDBDuckDB.Adapter do
 
   @impl true
   def supports?(feature) do
-    feature in [:cte, :window_functions, :transactions, :rollup]
+    feature in [:cte, :window_functions, :transactions, :rollup, :cube, :grouping_sets]
   end
 
   # DuckDB folds identifier case, so a table matches case-insensitively, in
