@@ -41,6 +41,80 @@ defmodule SelectoDBDuckDB.Dialect do
   # computed-value fragments (json_text) stay unsupported.
   @impl true
   def render_computed_value(
+        %{__struct__: Selecto.Dialect.ComputedValue, operation: :month_day, expression: value},
+        _query
+      ), do: {:ok, ["(EXTRACT(MONTH FROM ", value, ") * 100 + EXTRACT(DAY FROM ", value, "))"]}
+
+  def render_computed_value(
+        %{__struct__: Selecto.Dialect.ComputedValue, operation: :read_clock, expression: value},
+        _query
+      ),
+      do: {:ok, ["CAST(", value, " AS TIMESTAMP)"]}
+
+  def render_computed_value(
+        %{
+          __struct__: Selecto.Dialect.ComputedValue,
+          operation: :period_bound,
+          expression: value,
+          type: type
+        },
+        _query
+      ),
+      do:
+        {:ok,
+         [
+           "CAST(",
+           value,
+           " AS ",
+           case type do
+             "date" -> "DATE"
+             "instant" -> "TIMESTAMPTZ"
+             _ -> "TIMESTAMP"
+           end,
+           ")"
+         ]}
+
+  def render_computed_value(
+        %{
+          __struct__: Selecto.Dialect.ComputedValue,
+          operation: operation,
+          expression: [start, finish],
+          type: "decimal",
+          path: []
+        },
+        _selecto
+      )
+      when operation in [:hours_between, :fractional_days_between] do
+    divisor = if operation == :hours_between, do: "3600.0", else: "86400.0"
+
+    {:ok,
+     [
+       "(EXTRACT(EPOCH FROM (CAST(",
+       finish,
+       " AS TIMESTAMP) - CAST(",
+       start,
+       " AS TIMESTAMP))) / ",
+       divisor,
+       ")"
+     ]}
+  end
+
+  def render_computed_value(
+        %{
+          __struct__: Selecto.Dialect.ComputedValue,
+          operation: :epoch_datetime,
+          expression: value,
+          type: unit,
+          path: []
+        },
+        _selecto
+      )
+      when unit in ["seconds", "milliseconds"] do
+    scale = if unit == "milliseconds", do: "1000.0", else: "1.0"
+    {:ok, ["(TIMESTAMP '1970-01-01' + (", value, " / ", scale, ") * INTERVAL '1 second')"]}
+  end
+
+  def render_computed_value(
         %Selecto.Dialect.ComputedValue{
           operation: :cast,
           expression: expression,
@@ -68,7 +142,9 @@ defmodule SelectoDBDuckDB.Dialect do
         _selecto
       ) do
     if computed_sql?(start) and computed_sql?(finish),
-      do: {:ok, ["date_diff('day', CAST(", start, " AS DATE), CAST(", finish, " AS DATE))"]},
+      do:
+        {:ok,
+         ["date_diff('day', CAST(", start, " AS TIMESTAMP), CAST(", finish, " AS TIMESTAMP))"]},
       else: invalid_computed_value(:days_between)
   end
 
