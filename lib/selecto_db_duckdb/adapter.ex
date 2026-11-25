@@ -554,6 +554,12 @@ defmodule SelectoDBDuckDB.Adapter do
     end
   end
 
+  defp write_error(type, reason) when is_binary(reason) do
+    Error.new(type, "DuckDB write failed",
+      details: %{adapter: :duckdb, category: duckdb_error_category(reason)}
+    )
+  end
+
   defp write_error(type, reason),
     do: Error.adapter_failure(type, :duckdb, reason, "DuckDB write failed")
 
