@@ -192,6 +192,7 @@ defmodule SelectoDBDuckDB.Adapter do
   def supports?(feature) do
     feature in [
       :cte,
+      :native_null_ordering,
       :window_functions,
       :transactions,
       :rollup,
